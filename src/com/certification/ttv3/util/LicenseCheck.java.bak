@@ -1,0 +1,611 @@
+package com.certification.ttv3.util;
+
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.math.BigInteger;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.Proxy;
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.URLEncoder;
+import java.security.MessageDigest;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.prefs.Preferences;
+
+import javax.swing.JOptionPane;
+import javax.swing.JProgressBar;
+
+import com.certification.ttv3.TrainingTool;
+import com.certification.ttv3.dialog.DLogin;
+
+public class LicenseCheck {
+	private String sMBSerial;
+	private byte[] aMAC;
+	public static final boolean bDebug=false; // sets debug output and skips encryption checks - BE CAREFUL !
+	public static final boolean bDemo=false; // sets demo mode, skips MAC/CPUid checks
+
+	public LicenseCheck() {
+		sMBSerial=getMotherboardSN();
+		getMAC();
+	}
+
+	public static String convertPass(char[] aP) {
+		try {
+			MessageDigest md = MessageDigest.getInstance("MD5");
+			return toHex(md.digest(new String(aP).getBytes("UTF-8")));
+		} catch (Exception e) {
+			// No MD5?
+			return aP.toString();
+		}
+	}
+
+	public static String toHex(byte[] bytes) {
+	    BigInteger bi = new BigInteger(1, bytes);
+	    return String.format("%0" + (bytes.length << 1) + "x", bi);
+	}
+
+	public String tryOnline(String sE, String sP, Proxy proxy, String sAuthUser, String sAuthPass, JProgressBar jProgBar) throws IOException {
+		byte[] aRequest=genRequest(sE, sP);
+
+		return getResponse(DLogin.sAuthorizeUrl, aRequest, proxy, sAuthUser, sAuthPass, jProgBar);
+	}
+
+	public static String getLicenseString(int iLicense) {
+		Preferences pApp=TrainingTool.getAppPreferencesNode();
+		Preferences pLicense=pApp.node("license" + iLicense);
+		return pLicense.get("licensestring", "");
+	}
+
+	public static Properties getLicenseDetail(String sLicense) {
+		/*if(sLicense.trim().length()>0) {
+			if(LicenseCheck.bDebug) System.out.println("null sLicense");
+			return null;
+		}*/
+
+		Properties aLic=new Properties();
+
+		//if(LicenseCheck.bDebug) System.out.println("sLicense: " + sLicense);
+
+		try {
+			// Convert back from base 64 to byte array
+			byte[] aResp=Base64.decode(sLicense.getBytes("UTF-8"));
+
+			ByteArrayOutputStream baosUser=new ByteArrayOutputStream();
+			ByteArrayOutputStream baosPass=new ByteArrayOutputStream();
+			ByteArrayOutputStream baosMAC=new ByteArrayOutputStream();
+			ByteArrayOutputStream baosMBS=new ByteArrayOutputStream();
+			ByteArrayOutputStream baosTimestamps=new ByteArrayOutputStream();
+			ByteArrayOutputStream baosKey=new ByteArrayOutputStream(); // key is 24 bytes
+			ByteArrayOutputStream baosVendor=new ByteArrayOutputStream();
+			ByteArrayOutputStream baosCode=new ByteArrayOutputStream();
+			ByteArrayOutputStream baosVersion=new ByteArrayOutputStream();
+			ByteArrayOutputStream baosUTime=new ByteArrayOutputStream();
+			ByteArrayOutputStream baosFileSize=new ByteArrayOutputStream();
+
+			for(int i=0; i<aResp.length; i+=6) {
+				if(aResp[i]==0) break;
+				baosUser.write(aResp[i]);
+			}
+
+			for(int i=1; i<aResp.length; i+=6) {
+				if(aResp[i]==0) break;
+				baosPass.write(aResp[i]);
+			}
+
+			for(int i=2; baosMAC.size()<6; i+=6) {
+				baosMAC.write(aResp[i]);
+			}
+
+			for(int i=2+(8*6); i<aResp.length; i+=6) {
+				if(aResp[i]==0) break;
+				baosFileSize.write(aResp[i]);
+			}
+
+			for(int i=3; i<aResp.length; i+=6) {
+				if(aResp[i]==0) break;
+				baosMBS.write(aResp[i]);
+			}
+
+			for(int i=4; i<aResp.length; i+=6) {
+				if(aResp[i]==0) break;
+				baosTimestamps.write(aResp[i]);
+			}
+
+			int iPos;
+			for(iPos=5; iPos<aResp.length; iPos+=6) {
+				if(aResp[iPos]==0) break;
+				baosKey.write(aResp[iPos]);
+			}
+			iPos+=6;
+			for(; iPos<aResp.length; iPos+=6) {
+				if(aResp[iPos]==0) break;
+				baosVendor.write(aResp[iPos]);
+			}
+			iPos+=6;
+			for(; iPos<aResp.length; iPos+=6) {
+				if(aResp[iPos]==0) break;
+				baosCode.write(aResp[iPos]);
+			}
+			iPos+=6;
+			for(; iPos<aResp.length; iPos+=6) {
+				if(aResp[iPos]==0) break;
+				baosVersion.write(aResp[iPos]);
+			}
+			iPos+=6;
+			for(; iPos<aResp.length; iPos+=6) {
+				if(aResp[iPos]==0) break;
+				baosUTime.write(aResp[iPos]);
+			}
+
+			aLic.setProperty("user", baosUser.toString().toLowerCase());
+			aLic.setProperty("pass", baosPass.toString());
+			aLic.setProperty("mac", baosMAC.toString());
+			aLic.setProperty("cpu", baosMBS.toString());
+			aLic.setProperty("timestamps", baosTimestamps.toString());
+			aLic.setProperty("key", baosKey.toString());
+			aLic.setProperty("vendor", baosVendor.toString());
+			aLic.setProperty("code", baosCode.toString());
+			aLic.setProperty("version", baosVersion.toString());
+			aLic.setProperty("utime", baosUTime.toString());
+			aLic.setProperty("license", sLicense);
+
+			String sTimes=aLic.getProperty("timestamps");
+			String[] aTimes=sTimes.split(":");
+			SimpleDateFormat dateFormat=new SimpleDateFormat("MMM d, yyyy");
+			if(aTimes.length==3) {
+				aLic.setProperty("start", aTimes[0]);
+				try {
+					long lStart=Long.parseLong(aTimes[0]);
+					Date dStart=new Date(lStart*1000);
+					aLic.setProperty("startdate", dateFormat.format(dStart));
+				} catch (Exception e) {}
+				aLic.setProperty("expire", aTimes[1]);
+				try {
+					long lExpire=Long.parseLong(aTimes[1]);
+					Date dExpire=new Date(lExpire*1000);
+					aLic.setProperty("expiredate", dateFormat.format(dExpire));
+				} catch (Exception e) {}
+				aLic.setProperty("secleft", aTimes[2]);
+			}
+
+			try {
+				long lFileSize=Long.parseLong(baosFileSize.toString());
+				aLic.setProperty("filesize", Long.toString(lFileSize));
+			} catch (Exception e) {
+				aLic.setProperty("filesize", "0");
+			}
+		} catch (Exception e) {
+			if(LicenseCheck.bDebug) e.printStackTrace();
+			return null;
+		}
+
+		//System.out.println(aLic);
+
+		return aLic;
+	}
+
+	public static void updateLicenses(String[] aNewLicenses, JProgressBar jProgBar) {
+		//System.out.println("in updateLicenses");
+		if(jProgBar!=null) jProgBar.setString("Updating Licenses 1/4...");
+		// Convert new licenses into hashmap
+		int iCurKey=0;
+		HashMap<Integer, Properties> mNewLicenses=new HashMap<Integer,Properties>();
+		int iCount=0;
+		for(String sLic : aNewLicenses) {
+			Properties aNewLic=LicenseCheck.getLicenseDetail(sLic); // Convert to property list
+			if(aNewLic!=null) {
+				long lNewSecLeft=Long.parseLong(aNewLic.getProperty("secleft"));
+				boolean bFound=false;
+				for(Integer iTempKey : mNewLicenses.keySet()) { // Loop over incoming licenses, find the most recent with matching key and user
+					Properties aTempLic=mNewLicenses.get(iTempKey);
+					if(aTempLic.getProperty("key").compareTo(aNewLic.getProperty("key"))==0 && aTempLic.getProperty("user").compareTo(aNewLic.getProperty("user"))==0) {
+						// Found a match, compare secleft and update if this license is newer
+						long lCurSecLeft=Long.parseLong(aTempLic.getProperty("secleft"));
+						if(lNewSecLeft>lCurSecLeft) mNewLicenses.put(iTempKey, aNewLic);
+						bFound=true;
+					}
+				}
+				if(!bFound) { // No match, add to end of map
+					iCurKey++;
+					mNewLicenses.put(iCurKey, aNewLic);
+				}
+			}
+
+			if(jProgBar!=null) {
+				iCount++;
+				int iProg=(int)((((float)iCount)/((float)aNewLicenses.length))*100);
+				jProgBar.setValue(iProg);
+			}
+		}
+
+		//System.out.println(mNewLicenses);
+
+		// mNewLicenses now contains only most recent licenses, no duplicates
+
+
+		jProgBar.setString("Updating Licenses 2/4...");
+		// Load all current licenses into map
+		HashMap<String, Properties> mCurLicenses=new HashMap<String,Properties>(); // Store user licenses here
+		int iNextLicenseNum=0;
+
+		try { // Try to pull from system preferences
+			Preferences pApp=TrainingTool.getAppPreferencesNode();
+			String[] aChildren=pApp.childrenNames();
+
+			iCount=0;
+			for(String sKey : aChildren) {
+				if(sKey.indexOf("license")==0) {
+					mCurLicenses.put(sKey, LicenseCheck.getLicenseDetail(pApp.node(sKey).get("licensestring","")));
+					try {
+						int i=Integer.parseInt(sKey.substring(7));
+						if(i>iNextLicenseNum) iNextLicenseNum=i;
+					} catch (NumberFormatException nfe) {
+
+					}
+				}
+				if(jProgBar!=null) {
+					iCount++;
+					int iProg=(int)((((float)iCount)/((float)aChildren.length))*100);
+					jProgBar.setValue(iProg);
+				}
+			}
+			iNextLicenseNum++;
+		} catch (Exception e) {
+			//e.printStackTrace();
+			if(LicenseCheck.bDebug) System.out.println("Unable to access system preferences");
+			JOptionPane.showMessageDialog(null, "Unable to access system preferences,\nplease try executing the Testing Engine as a computer administrator.", "Unable to store licenses", JOptionPane.ERROR_MESSAGE);
+		}
+
+		// mCurLicenses now contains all current licenses
+
+
+		jProgBar.setString("Updating Licenses 3/4...");
+		// Loop thru new licenses, find matches in current licenses and update/insert as needed
+		try { // Try to pull from system preferences
+			Preferences pApp=TrainingTool.getAppPreferencesNode();
+			iCount=0;
+			for(Integer iKey : mNewLicenses.keySet()) {
+				Properties aNewLic=mNewLicenses.get(iKey);
+				Boolean bFound=false;
+				for(String sKey : mCurLicenses.keySet()) {
+					Properties aCurLic=mCurLicenses.get(sKey);
+					if(aCurLic!=null && aNewLic!=null) {
+						if(aCurLic.getProperty("key").compareTo(aNewLic.getProperty("key"))==0 && aCurLic.getProperty("user").compareTo(aNewLic.getProperty("user"))==0) {
+							// Found a match, update the license
+							pApp.node(sKey).put("licensestring", aNewLic.getProperty("license"));
+							if(pApp.node(sKey).get("status", "0").compareTo("-1")==0) {
+								pApp.node(sKey).put("status", "2");
+							}
+							//if(LicenseCheck.bDebug) System.out.println("Updated " + sKey);
+							//pApp.sync();
+							bFound=true;
+						}
+					}
+				}
+				long lNewSecLeft=0;
+				try {
+					lNewSecLeft=Long.parseLong(aNewLic.getProperty("secleft"));
+				} catch (Exception e) {}
+				if(!bFound && lNewSecLeft>0) {
+					pApp.node("license" + iNextLicenseNum).put("licensestring", aNewLic.getProperty("license"));
+					//if(LicenseCheck.bDebug) System.out.println("Created license" + iNextLicenseNum);
+					iNextLicenseNum++;
+				}
+				if(jProgBar!=null) {
+					iCount++;
+					int iProg=(int)((((float)iCount)/((float)mNewLicenses.size()))*100);
+					jProgBar.setValue(iProg);
+				}
+			}
+			pApp.sync();
+		} catch (Exception e) {
+			//e.printStackTrace();
+			if(LicenseCheck.bDebug) System.out.println("Unable to access system preferences");
+			JOptionPane.showMessageDialog(null, "Unable to access system preferences,\nplease try executing the Testing Engine as a computer administrator.", "Unable to store licenses", JOptionPane.ERROR_MESSAGE);
+		}
+
+		jProgBar.setString("Updating Licenses 4/4...");
+		// Loop thru all licenses, removed deleted licenses
+		try { // Try to pull from system preferences
+			Preferences pApp=TrainingTool.getAppPreferencesNode();
+			iCount=0;
+			for(String sKey : mCurLicenses.keySet()) {
+				Properties aCurLic=mCurLicenses.get(sKey);
+				Boolean bFound=false;
+				for(Integer iKey : mNewLicenses.keySet()) {
+					Properties aNewLic=mNewLicenses.get(iKey);
+					if(aCurLic!=null && aNewLic!=null) {
+						if(aCurLic.getProperty("user").compareTo(aNewLic.getProperty("user"))==0) { // Only look at current user
+							if(aCurLic.getProperty("vendor").compareTo(aNewLic.getProperty("vendor"))==0 && aCurLic.getProperty("code").compareTo(aNewLic.getProperty("code"))==0) {
+								// Found a match, don't delete the license
+								bFound=true;
+							}
+						} else bFound=true;
+					} else {
+						//if(aCurLic==null) System.out.println("aCurLic null:" + sKey);
+						//if(aNewLic==null) System.out.println("aNewLic null:" + iKey);
+					}
+				}
+				if(!bFound) {
+					//System.out.println("Delete license:" + sKey);
+					//System.out.println(aCurLic);
+					//pApp.node(sKey).removeNode();
+					pApp.node(sKey).put("status", "-1");
+				}
+				if(jProgBar!=null) {
+					iCount++;
+					int iProg=(int)((((float)iCount)/((float)mCurLicenses.size()))*100);
+					jProgBar.setValue(iProg);
+				}
+			}
+		} catch (Exception e) {
+			//e.printStackTrace();
+			if(LicenseCheck.bDebug) System.out.println("Unable to access system preferences");
+			JOptionPane.showMessageDialog(null, "Unable to access system preferences,\nplease try executing the Testing Engine as a computer administrator.", "Unable to store licenses", JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	public static HashMap<Integer, String> getAllLicenses() {
+		HashMap<Integer, String> aLicenses=new HashMap<Integer, String>();
+		try { // Try to pull from system preferences
+			Preferences pApp=TrainingTool.getAppPreferencesNode();
+			String[] aChildren=pApp.childrenNames();
+			for(String sKey : aChildren) {
+				if(sKey.indexOf("license")==0) {
+					if(pApp.node(sKey).get("status", "0").compareTo("-1")!=0) {
+						int iLicenseNum=Integer.parseInt(sKey.substring(7));
+						aLicenses.put(iLicenseNum, pApp.node(sKey).get("licensestring", ""));
+					}
+				}
+			}
+		} catch (Exception e) {}
+
+		return aLicenses;
+	}
+
+	public static ArrayList<Integer> getUserLicenses(String sEmail, String sPass, JProgressBar jProgBar) {
+		if(LicenseCheck.bDebug) System.out.println("getAllLicenses:start");
+		HashMap<Integer, String> aLicenses=getAllLicenses();
+		if(LicenseCheck.bDebug) System.out.println("getAllLicenses:end");
+
+		ArrayList<Integer> aUserLicenses=new ArrayList<Integer>();
+		HashMap<Integer, String[]> mSort=new HashMap<Integer, String[]>();
+		int iCount=0;
+		for(Integer iLic : aLicenses.keySet()) {
+			Properties aL=getLicenseDetail(aLicenses.get(iLic));
+			if(aL!=null) {
+				if(aL.getProperty("user")!=null && aL.getProperty("user").compareTo(sEmail)==0 && aL.getProperty("pass")!=null && aL.getProperty("pass").compareTo(sPass)==0) {
+					//aUserLicenses.add(iLic);
+					String[] aVendorCode=new String[]{aL.getProperty("vendor"), aL.getProperty("code")};
+					mSort.put(iLic, aVendorCode);
+					if(jProgBar!=null) {
+						int iProg=(int)((((float)iCount)/((float)aLicenses.size()))*100);
+						jProgBar.setValue(iProg);
+					}
+				}
+			}
+		}
+
+		if(LicenseCheck.bDebug) System.out.println("sortLicenses:start");
+		aUserLicenses=sortLicenses(mSort);
+		if(LicenseCheck.bDebug) System.out.println("sortLicenses:end");
+
+		return aUserLicenses;
+	}
+
+	public String getResponse(String sURL, byte[] aRequest, Proxy proxy, String sAuthUser, String sAuthPass, JProgressBar jProgBar) {
+		try { // Construct data
+			String data = URLEncoder.encode("auth", "UTF-8") + "=" + URLEncoder.encode(Base64.encodeBytes(aRequest), "UTF-8");
+			if(bDebug) System.out.println(data);
+
+			// Send data
+			URL url = new URL(sURL);
+			URLConnection conn;
+			if(proxy!=null) conn = url.openConnection(proxy);
+				else conn = url.openConnection();
+			conn.setDoOutput(true);
+			if(sAuthUser!=null && sAuthPass!=null) conn.setRequestProperty("Proxy-Authorization", "Basic " + Base64.encodeBytes(new String(sAuthUser).getBytes("UTF-8")) + ":" + Base64.encodeBytes(new String(sAuthPass).getBytes("UTF-8")));
+
+			OutputStreamWriter wr = new OutputStreamWriter(conn.getOutputStream());
+			wr.write(data);
+			wr.flush();
+
+			// Get the response
+			BufferedReader rd = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+			String line;
+			//long lUSize=conn.getContentLengthLong();
+			int lUSize=conn.getContentLength();
+			String sResponse="";
+			while ((line = rd.readLine()) != null) {
+				sResponse+=line;
+				int iProg=(int)((((float)sResponse.length())/((float)lUSize))*100);
+				if(jProgBar!=null) {
+					jProgBar.setValue(iProg);
+				}
+			}
+			wr.close();
+			rd.close();
+
+			return sResponse;
+		} catch (Exception e) {
+			return "";
+		}
+	}
+
+	// Used during downloads
+	public InputStream getResponseInputStream(String sURL, String sRequest, Proxy proxy, String sAuthUser, String sAuthPass) {
+		try { // Construct data
+			String data = URLEncoder.encode("auth", "UTF-8") + "=" + URLEncoder.encode(sRequest, "UTF-8");
+			if(bDebug) System.out.println(data);
+
+			// Send data
+			URL url = new URL(sURL);
+			URLConnection conn;
+			if(proxy!=null) conn = url.openConnection(proxy);
+				else conn = url.openConnection();
+			conn.setDoOutput(true);
+			if(sAuthUser!=null && sAuthPass!=null) conn.setRequestProperty("Proxy-Authorization", "Basic " + Base64.encodeBytes(new String(sAuthUser).getBytes("UTF-8")) + ":" + Base64.encodeBytes(new String(sAuthPass).getBytes("UTF-8")));
+
+			OutputStreamWriter wr = new OutputStreamWriter(conn.getOutputStream());
+			wr.write(data);
+			wr.flush();
+
+			// Get the response
+			return conn.getInputStream();
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	private byte[] genRequest(String sEmail, String sPass) {
+		// Interlace: Email, Pass(MD5), MAC, CPUID
+		byte[] aEncode;
+
+		try {
+			byte[] aEmail=sEmail.toLowerCase().getBytes("UTF-8");
+			byte[] aPass=sPass.getBytes("UTF-8");
+			byte[] aMBSerial=sMBSerial.getBytes("UTF-8");
+
+			int len=60;
+			aEncode=new byte[len*6];
+
+			for(int i=0; i<aEmail.length; i++) {
+				if(i*6<aEncode.length) aEncode[i*6]=aEmail[i];
+			}
+			for(int i=0; i<aPass.length; i++) {
+				if(i*6+1<aEncode.length) aEncode[i*6+1]=aPass[i];
+			}
+			for(int i=0; i<aMAC.length; i++) {
+				if(i*6+2<aEncode.length) aEncode[i*6+2]=aMAC[i];
+			}
+			for(int i=0; i<aMBSerial.length; i++) {
+				if(i*6+3<aEncode.length) aEncode[i*6+3]=aMBSerial[i];
+			}
+		} catch (Exception e) {
+			if(bDebug) e.printStackTrace();
+			aEncode=new byte[1];
+		}
+
+		return aEncode;
+	}
+
+	private String getMotherboardSN() {
+		String result = "";
+		try {
+			File file = File.createTempFile("tmp", ".vbs");
+			file.deleteOnExit();
+			FileWriter fw = new java.io.FileWriter(file);
+
+			String vbs = "Set objWMIService = GetObject(\"winmgmts:\\\\.\\root\\cimv2\")\n"
+					+ "Set colItems = objWMIService.ExecQuery _ \n"
+					+ "   (\"Select * from Win32_BaseBoard\") \n"
+					+ "For Each objItem in colItems \n"
+					+ "    Wscript.Echo objItem.SerialNumber \n"
+					+ "    exit for \n" + "Next \n";
+
+			fw.write(vbs);
+			fw.close();
+			Process p = Runtime.getRuntime().exec("cscript //NoLogo " + file.getPath());
+			BufferedReader input = new BufferedReader(new InputStreamReader(p.getInputStream()));
+			String line;
+			while ((line = input.readLine()) != null) result += line;
+			input.close();
+		} catch (Exception e) {
+			if(bDebug) e.printStackTrace();
+		}
+		return result.trim();
+	}
+
+	private void getMAC() {
+		try {
+			InetAddress address = InetAddress.getLocalHost();
+
+			/*
+			 * Get NetworkInterface for the current host and then read the
+			 * hardware address.
+			 */
+			NetworkInterface ni = NetworkInterface.getByInetAddress(address);
+			if (ni != null) {
+				aMAC = ni.getHardwareAddress();
+				if(aMAC==null) aMAC=new byte[6];
+				if(aMAC.length<6) { // Force it to 6 bytes
+					byte[] a6MAC=new byte[6];
+					for(int i=0; i<aMAC.length; i++) a6MAC[i]=aMAC[i];
+					aMAC=a6MAC;
+				}
+			}
+		} catch (Exception e) {
+			if(bDebug) e.printStackTrace();
+			aMAC=new byte[6];
+		}
+
+		if(bDebug) {
+			try {
+				//InetAddress address = InetAddress.getLocalHost();
+				//System.out.println("Localhost: " + address.getHostAddress());
+				//NetworkInterface ni = NetworkInterface.getByInetAddress(address);
+				//System.out.println("Localhost: " + ni.getDisplayName());
+
+				Enumeration<NetworkInterface> eNI=NetworkInterface.getNetworkInterfaces();
+				if(eNI!=null) {
+					while(eNI.hasMoreElements()) {
+						NetworkInterface ni=eNI.nextElement();
+						if(ni.isLoopback()==false && ni.isUp()==true) System.out.println(ni.getDisplayName() + " : " + ni.getName() + " : " + ni.isUp() + " : " + Base64.encodeBytes(ni.getHardwareAddress()));
+						/*if(ni.isLoopback()) {
+							if(ni.getHardwareAddress()==null) System.out.println("Loopback: null");
+								else System.out.println("Loopback: " + Base64.encodeBytes(ni.getHardwareAddress()));
+						} else {
+							if(ni.getHardwareAddress()==null) System.out.println("Other: null");
+								else System.out.println("Other: " + Base64.encodeBytes(ni.getHardwareAddress()));
+						}*/
+					}
+				} else {
+					System.out.println("No network interfaces found!");
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public static ArrayList<Integer> sortLicenses(Map<Integer, String[]> map)
+	{
+	    List<Map.Entry<Integer, String[]>> list =
+	        new LinkedList( map.entrySet() );
+	    Collections.sort(list, new Comparator<Map.Entry<Integer, String[]>>()
+	    {
+	        public int compare( Map.Entry<Integer, String[]> o1, Map.Entry<Integer, String[]> o2 )
+	        {
+	        	// Compare Vendor
+	        	int c1=o1.getValue()[0].compareToIgnoreCase(o2.getValue()[0]);
+	        	if(c1!=0) return c1;
+	        	// If same Vendor, compare Code
+	        	return o1.getValue()[1].compareToIgnoreCase(o2.getValue()[1]);
+	        }
+	    } );
+
+	    ArrayList<Integer> result = new ArrayList<Integer>();
+	    for (Map.Entry<Integer, String[]> entry : list)
+	    {
+	    	result.add(entry.getKey());
+	        //result.put( entry.getKey(), entry.getValue() );
+	    }
+	    return result;
+	}
+}

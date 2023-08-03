@@ -1,0 +1,561 @@
+package com.certification.ttv3.dialog;
+
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.Insets;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Properties;
+import java.util.prefs.Preferences;
+import java.util.zip.ZipFile;
+
+import javax.swing.BorderFactory;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JProgressBar;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.ListSelectionModel;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableColumn;
+
+import se.datadosen.component.RiverLayout;
+
+import com.certification.ttv3.TrainingTool;
+import com.certification.ttv3.util.JFancyTable;
+import com.certification.ttv3.util.LicenseCheck;
+
+@SuppressWarnings("serial")
+public class DExamManager extends JDialog implements ActionListener, ListSelectionListener {
+	TrainingTool tt;
+	
+	Image imgHistory;
+	ImageIcon imgSelect, imgCancel;
+	JButton bSelect, bCancel;
+	JLabel lHeader, lDetails;
+	Color cLineGray;
+	JScrollPane jsp;
+	TMExams tmExams;
+	JTable tExams;
+	JPanel pNoExams;
+	Font fDetails;
+	
+	public DExamManager(TrainingTool tt) {
+		super (tt, true);
+		
+		this.tt=tt;
+		
+		setTitle(TrainingTool.sBusinessName + " Exam Manager");
+		
+		Toolkit tk = getToolkit();
+		imgHistory = tk.getImage(getClass().getResource("/com/certification/ttv3/images/history-icon.png"));
+		imgSelect = new ImageIcon(tk.getImage(getClass().getResource("/com/certification/ttv3/images/em_select.png")));
+		imgCancel = new ImageIcon(tk.getImage(getClass().getResource("/com/certification/ttv3/images/em_cancel.png")));
+
+		setBackground(Color.WHITE);
+		
+		fDetails = new Font("Arial",Font.PLAIN, 12);
+
+		lHeader=new JLabel("Exam Manager");
+		lHeader.setFont(new Font("Arial",Font.PLAIN,24));
+		lHeader.setForeground(new Color(4, 50, 96));
+
+		lDetails=new JLabel("Select and monitor licensed exams");
+		lDetails.setFont(new Font("Arial",Font.PLAIN,11));
+		lDetails.setForeground(new Color(132,135,140));
+		
+		bSelect=new JButton(imgSelect);
+		bSelect.setBorderPainted(false);
+		bSelect.setMargin(new Insets(0,0,0,0));
+		bSelect.setOpaque(false);
+		bSelect.setContentAreaFilled(false);
+		bSelect.setActionCommand("Select Exam");
+		bSelect.setCursor(new Cursor(Cursor.HAND_CURSOR));
+		bSelect.addActionListener(this);
+		bSelect.setFocusable(false);
+		bSelect.setEnabled(false);
+		
+		bCancel=new JButton(imgCancel);
+		bCancel.setBorderPainted(false);
+		bCancel.setMargin(new Insets(0,0,0,0));
+		bCancel.setOpaque(false);
+		bCancel.setContentAreaFilled(false);
+		bCancel.setActionCommand("Cancel");
+		bCancel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+		bCancel.addActionListener(this);
+		bCancel.setFocusable(false);
+		
+		JunkPanel jP=new JunkPanel();
+
+		jP.add(lHeader);
+		jP.add(lDetails);
+		jP.add(bSelect);
+		jP.add(bCancel);
+
+		cLineGray=new Color(221,221,221);
+		
+		pNoExams=new JPanel();
+		pNoExams.setLayout(new RiverLayout());
+		JLabel lNoExams=new JLabel("No Exams Available");
+		lNoExams.setFont(new Font("Arial", Font.PLAIN, 18));
+		lNoExams.setHorizontalTextPosition(JLabel.CENTER);
+		pNoExams.add("br hfill center", lNoExams);
+		pNoExams.setBackground(Color.WHITE);
+		
+		tExams=buildExamsTable();
+
+		jsp=new JScrollPane(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		jsp.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createEmptyBorder(0,10,0,10), BorderFactory.createLineBorder(cLineGray)));
+		jsp.setBackground(Color.WHITE);
+		jsp.getViewport().setBackground(Color.WHITE);
+		if(tmExams.getRowCount()>0) {
+			jsp.getViewport().setView(tExams);
+		} else {
+			jsp.getViewport().setView(pNoExams);
+		}
+
+		jP.add(jsp);
+		
+		add(jP);
+		
+		setSize(new Dimension(600,370));
+		setResizable(false);
+		setLocationRelativeTo(null); // Center on screen
+	}
+	
+	private JTable buildExamsTable() {
+		JFancyTable tExams=null;
+
+		tmExams=new TMExams();
+		tExams=new JFancyTable(tmExams);
+		tExams.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		tExams.getSelectionModel().addListSelectionListener(this);
+
+		tExams.setCellSelectionEnabled(false);
+		tExams.setRowSelectionAllowed(true);
+		tExams.setBackground(Color.WHITE);
+		tExams.setOpaque(false);
+		tExams.setFont(fDetails);
+		tExams.setFocusable(false);
+		tExams.setRowHeight(24);
+		tExams.setIntercellSpacing(new Dimension(10,1));
+
+		TableColumn column = null;
+		column = tExams.getColumnModel().getColumn(0);
+		column.setPreferredWidth(120); // Vendor
+		column = tExams.getColumnModel().getColumn(1);
+		column.setPreferredWidth(80); // Code
+		column = tExams.getColumnModel().getColumn(2);
+		column.setPreferredWidth(80); // Version
+		column = tExams.getColumnModel().getColumn(3);
+		column.setPreferredWidth(120); // Expires
+		column = tExams.getColumnModel().getColumn(4);
+		column.setPreferredWidth(160); // Status
+		column.setCellRenderer(new ProgressRenderer());
+		
+		// Try ButtonColumn
+		Action aD = new AbstractAction("Download Exam") {
+            public void actionPerformed(ActionEvent e) {
+                DExamManager.this.actionPerformed(e); // Pass it along
+            }
+        };
+		new ButtonColumn(tExams, aD, 4);
+
+		return tExams;
+	}
+	
+	class ProgressRenderer extends DefaultTableCellRenderer {
+		public Component getTableCellRendererComponent(JTable table,
+				Object value, boolean isSelected, boolean hasFocus, int row,
+				int column) {
+			if(value instanceof JProgressBar) return (JProgressBar)value;
+			return super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+		}
+	}
+	
+	public void reloadLicenses() {
+		tmExams.reloadLicenses();
+		if(tmExams.getRowCount()>0) {
+			jsp.getViewport().setView(tExams);
+		} else {
+			jsp.getViewport().setView(pNoExams);
+		}
+	}
+	
+	public void download() {
+		// Start background downloads
+		tmExams.download();
+	}
+	
+	public void download(int iLic) {
+		// Start background downloads
+		tmExams.download(iLic);
+	}
+	
+	class TMExams extends AbstractTableModel {
+		private String[] aColNames;
+		public ArrayList<Integer> aLicenseNums;
+		HashMap<Integer, JProgressBar> aProgressBars;
+		HashMap<Integer, BDownload> aDownloads;
+
+		public TMExams() {
+			aColNames=new String[]{"Vendor", "Code", "Version", "Expires", "Status"};
+			aProgressBars=new HashMap<Integer, JProgressBar>();
+			aDownloads=new HashMap<Integer, BDownload>();
+			reloadLicenses();
+		}
+		
+		public void reloadLicenses() {
+			aLicenseNums=LicenseCheck.getUserLicenses(tt.getUserEmail(), tt.getUserPass(), null);
+			
+			fireTableDataChanged();
+		}
+		
+		public void download() {
+			// Start background downloads
+			int i=0;
+			if(aLicenseNums.size()>4) { // more than 4 does not auto-download
+				for(Integer iLic : aLicenseNums) {
+					if(tt.getLicenseStatus(iLic)==1) {
+						String sLic=LicenseCheck.getLicenseString(iLic);
+						Properties aLic=LicenseCheck.getLicenseDetail(sLic);
+						System.out.println("auto-download:");
+						System.out.println(aLic);
+						
+						download(iLic);
+						tmExams.fireTableCellUpdated(i, 5);
+					}
+					i++;
+				}
+			} else {
+				// Start background downloads
+				for(Integer iLic : aLicenseNums) {
+					if(tt.getLicenseStatus(iLic)==0) {
+						JProgressBar jPB=new JProgressBar(0, 100);
+						jPB.setString("Downloading...");
+						jPB.setStringPainted(true);
+						aProgressBars.put(iLic, jPB);
+						String sLic=LicenseCheck.getLicenseString(iLic);
+						Properties aLic=LicenseCheck.getLicenseDetail(sLic);
+						Preferences pApp=TrainingTool.getAppPreferencesNode();
+						Preferences pLicense=pApp.node("license" + iLic);
+						String sFile=pLicense.get("file", "");
+						File fExamFile=tt.getRandomExamFileName(sFile);
+						long lSize=0;
+						try {
+							lSize=Long.parseLong(aLic.getProperty("filesize"));
+						} catch (Exception e) {}
+						
+						BDownload bDownload=new BDownload(iLic, lSize, fExamFile, jPB);
+						aDownloads.put(iLic, bDownload);
+						Thread tDownload=new Thread(bDownload);
+						tDownload.start();
+						tmExams.fireTableCellUpdated(i, 5);
+					}
+					i++;
+				}
+			}
+		}
+		
+		public void download(int iLic) {
+			// Start background download
+			JProgressBar jPB=new JProgressBar(0, 100);
+			jPB.setString("Downloading...");
+			jPB.setStringPainted(true);
+			aProgressBars.put(iLic, jPB);
+			String sLic=LicenseCheck.getLicenseString(iLic);
+			Properties aLic=LicenseCheck.getLicenseDetail(sLic);
+			Preferences pApp=TrainingTool.getAppPreferencesNode();
+			Preferences pLicense=pApp.node("license" + iLic);
+			String sFile=pLicense.get("file", "");
+			File fExamFile=tt.getRandomExamFileName(sFile);
+			long lSize=0;
+			try {
+				lSize=Long.parseLong(aLic.getProperty("filesize"));
+			} catch (Exception e) {}
+			
+			BDownload bDownload=new BDownload(iLic, lSize, fExamFile, jPB);
+			aDownloads.put(iLic, bDownload);
+			Thread tDownload=new Thread(bDownload);
+			tDownload.start();
+		}
+
+		public int getColumnCount() {
+			return aColNames.length;
+		}
+
+		public int getRowCount() {
+			return aLicenseNums.size();
+			//return 1;
+		}
+
+		public Object getValueAt(int iRow, int iCol) {
+			Properties aLic=LicenseCheck.getLicenseDetail(LicenseCheck.getLicenseString(aLicenseNums.get(iRow)));
+			
+			switch(iCol) {
+				case 0: return aLic.getProperty("vendor");
+				case 1: return aLic.getProperty("code");
+				case 2: return aLic.getProperty("version");
+				case 3: return aLic.getProperty("expiredate");
+				case 4: 
+					int iStatus=tt.getLicenseStatus(aLicenseNums.get(iRow));
+					//if(iStatus!=3) System.out.println(aLic.getProperty("code") + ":" + iStatus);
+					if(iStatus==0) return "Download Exam";
+					/*if(iStatus==0) {
+						JButton jB=new JButton("Download Exam");
+						jB.setActionCommand(Integer.toString(aLicenseNums.get(iRow)));
+						jB.addActionListener(DExamManager.this);
+						return jB;
+					}*/
+					//if(iStatus==0) return aLic.getProperty("filesize");
+					if(iStatus==1) return aProgressBars.get(aLicenseNums.get(iRow));
+					if(iStatus==2) return "Available";
+					if(iStatus==3) return "Expired";
+					//return "";
+					return Integer.toString(iStatus);
+			}
+			
+			/*switch(iCol) {
+				case 0: return aLic.getProperty("vendor");
+				case 1: {
+					if(pUserExam.getStartDate()==null) return "Date Unknown";
+						else return dateFormat.format(pUserExam.getStartDate());
+				}
+				case 2: return pUserExam.getQuestionCount();
+				case 3: return pUserExam.getNumCorrect();
+				case 4: return TrainingTool.formatSeconds(pUserExam.getSecondsRemaining());
+				case 5: return aDetailButtons.get(i-1);
+				case 6: return aDeleteButtons.get(i-1);
+			}*/
+			return null;
+		}
+
+		public String getColumnName(int iCol) {
+			return aColNames[iCol];
+		}
+
+		public boolean isCellEditable(int iR, int iC) {
+			if(iC==4) {
+				int iStatus=tt.getLicenseStatus(tmExams.aLicenseNums.get(iR));
+				if(iStatus==0) return true;
+			}
+			return false;
+		}
+		
+		public void updateProgress(int iLic) {
+			this.fireTableCellUpdated(aLicenseNums.indexOf(iLic), 4);
+			updateSelectExamButton();
+		}
+		
+		public void updateSelectExamButton() {
+			try {
+				int iStatus=tt.getLicenseStatus(tmExams.aLicenseNums.get(tExams.getSelectionModel().getLeadSelectionIndex()));
+				if(iStatus!=2) bSelect.setEnabled(false);
+					else bSelect.setEnabled(true);
+			} catch (Exception e) {}
+		}
+	}
+	
+	public class JunkPanel extends JPanel {
+	
+		public void paint(Graphics g) {
+			Dimension dPanel=this.getSize();
+			Dimension d;
+			Rectangle rClip=g.getClipBounds();
+			int iRight;
+	
+			Graphics2D g2d=(Graphics2D)g;
+			g2d.addRenderingHints(TrainingTool.getRenderingHints());
+	
+			// This uses brute force method - erase everything and redraw everything
+			// It would be better to only redraw what is inside rClip
+	
+			g.setColor(Color.WHITE);
+			g.fillRect(rClip.x, rClip.y, rClip.width, rClip.height);
+	
+			d=lHeader.getPreferredSize();
+			lHeader.setBounds(96, 12, d.width, d.height);
+	
+			d=lDetails.getPreferredSize();
+			lDetails.setBounds(98, 43, d.width, d.height);
+			
+			jsp.setBounds(0,92,dPanel.width,dPanel.height-130);
+			jsp.revalidate();
+	
+			/*d=pDetails.getPreferredSize();
+			pDetails.setBounds(23, 98, d.width, d.height);*/
+	
+			iRight=dPanel.width;
+			if(iRight<46+d.width) iRight=46+d.width;
+	
+			g2d.setColor(cLineGray);
+			g2d.drawLine(20, 78, iRight-20, 78);
+			
+			g.drawImage(imgHistory, 16, 8, this);
+			
+			d=bSelect.getPreferredSize();
+			bSelect.setBounds(300,dPanel.height-d.height-8,d.width, d.height);
+			
+			d=bCancel.getPreferredSize();
+			bCancel.setBounds(460,dPanel.height-d.height-8,d.width, d.height);
+	
+			/*RoundRectangle2D.Double r2d=new RoundRectangle2D.Double(20, 92, iRight-40, d.height+20, 12, 12);
+			g2d.setPaint(new GradientPaint(0,92,Color.WHITE,0,d.height+20+92,new Color(240,243,246)));
+			g2d.fill(r2d);
+			g2d.setPaint(cLineGray);
+			g2d.draw(r2d);*/
+		    //g2d.setPaint(Color.black);
+			
+			paintChildren(g);
+		}
+	}
+	
+	private class BDownload implements Runnable {
+		int iLicense;
+		long lUSize;
+		File fExamFile;
+		JProgressBar jProgressBar;
+		
+		public BDownload(int iLNum, long lUSize, File fExamFile, JProgressBar jPB) {
+			this.iLicense=iLNum;
+			this.lUSize=lUSize;
+			this.fExamFile=fExamFile;
+			this.jProgressBar=jPB;
+			
+			Preferences pApp=TrainingTool.getAppPreferencesNode();
+			Preferences pLicense=pApp.node("license" + iLicense); // Grab the node
+			pLicense.put("file", fExamFile.getName());
+			pLicense.put("status", "1");
+			//System.out.println("assigned license " + iLicense + " filename: " + pLicense.get("file", ""));
+		}
+		
+		public void run() {
+			InputStream is=tt.getServerInputStream(LicenseCheck.getLicenseString(iLicense));
+			
+			//System.out.println("got input stream : " + LicenseCheck.getLicenseString(iLicense));
+			
+			try {
+				// Download the installer
+				FileOutputStream outFile=new FileOutputStream(fExamFile);
+				byte[] aBuff=new byte[1024];
+				int iCount;
+				long lTotal=0L;
+				while ((iCount=is.read(aBuff, 0, 1024)) != -1) {
+					outFile.write(aBuff, 0, iCount);
+					lTotal+=iCount;
+					int iProg=(int)((((float)lTotal)/((float)lUSize))*100);
+					//System.out.println(iProg);
+					if(jProgressBar!=null) {
+						jProgressBar.setValue(iProg);
+						tmExams.updateProgress(iLicense);
+					}
+					/*if(bCancel) {
+						outFile.close();
+						is.close();
+						fUpdateFile.delete();
+						setVisible(false);
+						return;
+					}*/
+				}
+				outFile.close();
+				is.close();
+				
+				// Verify zip
+				ZipFile zf=new ZipFile(fExamFile);
+				zf.close();
+				
+				Preferences pApp=TrainingTool.getAppPreferencesNode();
+				Preferences pLicense=pApp.node("license" + iLicense); // Grab the node
+				pLicense.put("status", "2");
+				
+				tmExams.updateProgress(iLicense);
+				
+			} catch (Exception e) {
+				// Retry download
+				e.printStackTrace();
+				
+				Preferences pApp=TrainingTool.getAppPreferencesNode();
+				Preferences pLicense=pApp.node("license" + iLicense); // Grab the node
+				pLicense.put("status", "0");
+				
+				tmExams.updateProgress(iLicense);
+				
+				// Check for server response
+				try {
+					String sResp=readFile(fExamFile);
+					if(sResp.indexOf("max licenses")>-1) {
+						JOptionPane.showMessageDialog(tt, "Maximum downloads per month used for this login,\nunable to complete download.", "Download limit reached", JOptionPane.INFORMATION_MESSAGE);
+					}
+				} catch (Exception e2) {
+					e2.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	private String readFile(File file) throws IOException {
+	    BufferedReader reader = new BufferedReader( new FileReader (file));
+	    String         line = null;
+	    StringBuilder  stringBuilder = new StringBuilder();
+	    String         ls = System.getProperty("line.separator");
+
+	    while( ( line = reader.readLine() ) != null ) {
+	        stringBuilder.append( line );
+	        stringBuilder.append( ls );
+	    }
+	    
+	    reader.close();
+
+	    return stringBuilder.toString();
+	}
+	
+	public void actionPerformed(ActionEvent ae) {
+		if(ae.getActionCommand().compareTo("Cancel")==0) {
+			setVisible(false);
+		}
+		if(ae.getActionCommand().compareTo("Select Exam")==0) {
+			selectExam();
+		}
+		try {
+			int row = Integer.valueOf(ae.getActionCommand());
+			int iLic=tmExams.aLicenseNums.get(row);
+			int iStatus=tt.getLicenseStatus(iLic);
+            if(iStatus==0) {
+            	// Begin download
+            	download(iLic);
+            	tmExams.fireTableCellUpdated(row, 5);
+            }
+		} catch (Exception e) {}
+	}
+	
+	private void selectExam() {
+		try {
+			tt.loadLicense(tmExams.aLicenseNums.get(tExams.getSelectionModel().getLeadSelectionIndex()));
+			setVisible(false);
+		} catch (Exception e) {}		
+	}
+
+	public void valueChanged(ListSelectionEvent lse) {
+		//System.out.println(tExams.getSelectionModel().getLeadSelectionIndex());
+		tmExams.updateSelectExamButton();
+	}
+}

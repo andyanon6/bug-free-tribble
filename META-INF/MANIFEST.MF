@@ -1,0 +1,4 @@
+Manifest-Version: 1.0
+Main-Class: com.certification.ttv3.TrainingTool
+Class-Path: .
+

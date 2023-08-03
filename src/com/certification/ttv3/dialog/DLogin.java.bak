@@ -1,0 +1,156 @@
+package com.certification.ttv3.dialog;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Insets;
+import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.net.URL;
+
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JTextField;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
+
+import se.datadosen.component.RiverLayout;
+
+import com.certification.ttv3.TrainingTool;
+import com.certification.ttv3.util.LicenseCheck;
+
+@SuppressWarnings("serial")
+public class DLogin extends JDialog implements ActionListener {
+	JTextField tfEmail;
+	JPasswordField tfPass;
+
+	JPanel pMain, pBottom, pSerial;
+	TrainingTool tt;
+	
+	// Pass c37a5
+
+	public static String sAuthorizeUrl="http://www." + TrainingTool.sBusinessURL + "/auth/licensev3.php", sActivateUrl="http://www." + TrainingTool.sBusinessURL + "/auth/license.php", sUpdateUrl="http://www." + TrainingTool.sBusinessURL + "/auth/licenseupdatev3.php";
+
+	public DLogin(TrainingTool tt) {
+		super(tt, true);
+		
+		this.tt=tt;
+
+		setTitle(TrainingTool.sBusinessName + " Questions and Answers Login");
+		
+		Toolkit tk = getToolkit();
+		URL uResource=getClass().getResource("/com/certification/ttv3/images/icon-16px.png");
+		setIconImage(tk.getImage(uResource));
+		
+		setLayout(new BorderLayout());
+		add(leftPanel(), BorderLayout.WEST);
+		if(pMain==null) pMain=mainPanel();
+		add(pMain, BorderLayout.CENTER);
+		pBottom=bottomPanel();
+		add(pBottom, BorderLayout.SOUTH);
+
+		setSize(new Dimension(600,370));
+		setResizable(false);
+		setLocationRelativeTo(null); // Center on screen
+	}
+
+	public void displayLogin() {
+		tfPass.setText("");
+		setVisible(true);
+	}
+
+	private JPanel leftPanel() {
+		JPanel jP=new JPanel();
+
+		URL uResource=getClass().getResource("/com/certification/ttv3/images/activation.png");
+		jP.add(new JLabel(new ImageIcon(uResource)), BorderLayout.CENTER);
+
+		jP.setBorder(new EmptyBorder(8,8,8,8));
+
+		return jP;
+	}
+
+	private JPanel mainPanel() {
+		JPanel jP=new JPanel();
+
+		jP.setLayout(new RiverLayout());
+
+		JLabel jL=new JLabel("By logging in, you are licensing this");
+		jP.add("left", jL);
+		jL=new JLabel("product to be used on this computer by the");
+		jP.add("br left", jL);
+		jL=new JLabel("licensed user only.");
+		jP.add("br left", jL);
+		jL=new JLabel("");
+		jP.add("br left", jL);
+		jL=new JLabel("");
+		jP.add("br left", jL);
+
+		jL=new JLabel("User email:");
+		jP.add("br left", jL);
+		tfEmail=new JTextField(30);
+		jP.add("br left", tfEmail);
+
+		jL=new JLabel("Password:");
+		jP.add("br left", jL);
+		tfPass=new JPasswordField(30);
+		jP.add("br left", tfPass);
+
+		jP.setBorder(new EmptyBorder(8,8,8,8));
+
+		return jP;
+	}
+
+	private JPanel bottomPanel() {
+		JPanel jP=new JPanel();
+
+		jP.setLayout(new RiverLayout());
+
+		JPanel jPB=new JPanel();
+		jPB.setBorder(new LineBorder(new Color(160,160,160), 1));
+		jPB.setPreferredSize(new Dimension(550, 1));
+
+		jP.add("hfill", jPB);
+
+		JButton jB=new JButton("Log In");
+		jB.setMargin(new Insets(2,20,2,20));
+		jB.addActionListener(this);
+		jP.add("right", jB);
+
+		jB=new JButton("Cancel");
+		jB.setMargin(new Insets(2,20,2,20));
+		jB.addActionListener(this);
+		jP.add("right", jB);
+
+		jP.setBorder(new EmptyBorder(8,8,8,8));
+
+		return jP;
+	}
+
+	public void actionPerformed(ActionEvent ae) {
+		if(ae.getActionCommand().compareTo("Cancel")==0) {
+			setVisible(false);
+		}
+		if(ae.getActionCommand().compareTo("Log In")==0) {
+			if(tfEmail.getText().length()==0) {
+				JOptionPane.showMessageDialog(this, "Please enter the email address used in your " + TrainingTool.sBusinessName + " member area");
+				tfEmail.requestFocus();
+				return;
+			}
+			if(tfPass.getPassword().length==0) {
+				JOptionPane.showMessageDialog(this, "Please enter the password used in your " + TrainingTool.sBusinessName + " member area");
+				tfPass.requestFocus();
+				return;
+			}
+
+			tt.setUser(tfEmail.getText(), LicenseCheck.convertPass(tfPass.getPassword()));
+			return;
+		}
+	}
+}
